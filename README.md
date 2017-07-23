@@ -1,2 +1,2 @@
 # CS9223-Data-Science
-from the fall class
+from the fall 2016 class
