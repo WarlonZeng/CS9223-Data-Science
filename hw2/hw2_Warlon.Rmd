@@ -1,0 +1,271 @@
+---
+title: "Time Series Analysis and Forecasting"
+author: "Warlon Zeng"
+date: "10/12/16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+# libraries
+library(stats)
+library(tseries)
+library(forecast)
+library(ggplot2)
+library(astsa)
+library(dplyr)
+
+# set working directory
+setwd("C:/Users/Warlon/Documents/R/hw2")
+```
+
+# Question 1
+
+## Part A
+The plot below clearly shows a upward curve trend. Data starts off slow and rises in the last bits of the year. Length is 84 and frequency is 4. 
+
+```{r plot, echo=FALSE}
+
+# load jojo data
+jojo <- read.table("jojo.dat")
+jojoTS <- ts(jojo, frequency = 4)
+
+# plot it, all observations (84)
+plot(1:84, jojoTS, type="o", col="black", xlab="Quarter", ylab="Quarterly Earnings per Share")
+
+```
+
+## Part B
+Question is asking us to remove trend and seasonal component to make the data stationary. We will do this quickly by assessing autocorrelation (lag) through acf. We see that after lag = 4 periods, seasonal components can be differenced to the point where the data can be said stationary, i.e., meets a certain threshold (sarima, Box-Ljung test) with p value being significant enough. Personally I think this is overkill as p-value < 0.05 already.
+
+```{r stationary, echo=FALSE}
+
+# diff, observe lag, diff lag
+jojoDiff <- diff(jojoTS)
+acf(jojoDiff)
+jojoDiff <- diff(jojoDiff, lag=4)
+acf(jojoDiff)
+
+plot(jojoDiff, type="o", col="black", xlab="Quarter", ylab="Quarterly Earnings per Share")
+
+# another way, source: https://anomaly.io/seasonal-trend-decomposition-in-r/
+#jojoTS2 <- ts(as.vector(t(jojo)), frequency=4) # make univariate
+#jojoSTL <- stl(jojoTS2, "periodic")
+#jojoRandom <- jojoSTL$time.series[,3] # by Loess
+#acf(jojoRandom)
+
+#plot(jojoRandom)
+
+```
+
+## Part C
+Creating a way to remove trend and seasonal components manually. We will use m = 1 in y'_t = y_t - y_(t-m).
+
+```{r code, echo=FALSE}
+
+# differencing, source: https://www.otexts.org/fpp/8/1
+temp <- jojoTS
+jojoManualDiff = {}
+for (i in 2:84) {
+  jojoManualDiff[i] = temp[i] - temp[i-1]
+}
+jojoManualDiff <- na.omit(jojoManualDiff)
+acf(jojoManualDiff)
+plot(jojoManualDiff, type="o", col="black", xlab="Quarter", ylab="Quarterly Earnings per Share")
+
+```
+
+## Part D
+Assessing if the data is stationary or not. We will use acf and pcf to test Part B and Part C. I believe the data is stationary for Part B because the ACF drops drastically at the start.
+
+```{r acf, echo=FALSE}
+
+# acf
+acf(jojoDiff)
+acf(jojoManualDiff)
+
+```
+
+## Part E
+Confirming if the data is stationary or not using Augmented Dickey-Fuller (ADF) t-statistic test. Data confirms both p-values < 0.05.
+```{r adf, echo=FALSE}
+
+# adf
+adf.test(jojoDiff)
+adf.test(jojoManualDiff)
+
+```
+
+# Question 2
+
+## Part A
+Applying ses() function to multiple extreme low alpha values appear to decrease forecast, lo, and hi for each lower alpha value we go to. Applying ses() function to multiple extreme low alpha values appear to decrease forecast, lo, and hi for each higher alpha value we go to.
+```{r ses, echo=FALSE}
+
+# ses with random alpha values
+jojoSESAlpha01 <- ses(jojo, initial="simple", alpha=0.01, h=1)
+jojoSESAlpha05 <- ses(jojo, initial="simple", alpha=0.05, h=1)
+jojoSESAlpha50 <- ses(jojo, initial="simple", alpha=0.50, h=1)
+jojoSESAlpha95 <- ses(jojo, initial="simple", alpha=0.95, h=1)
+jojoSESAlpha99 <- ses(jojo, initial="simple", alpha=0.99, h=1)
+
+jojoSESAlpha01
+jojoSESAlpha05
+jojoSESAlpha50
+jojoSESAlpha95
+jojoSESAlpha99
+
+```
+
+## Part B
+Calculating sse from one-step-ahead within-sample forecasts. Base formula uses sum(y_t - yhat_t)^2, used tools to ease calculation...
+```{r sse, echo=FALSE}
+
+# sse calculation, source: http://stackoverflow.com/questions/31975699/exponential-smoothing-plotting-sse-vs-alpha
+jojoSSEAlpha01 <- sum((jojo[,1] - fitted(jojoSESAlpha01)))
+jojoSSEAlpha05 <- sum((jojo[,1] - fitted(jojoSESAlpha05)))
+jojoSSEAlpha50 <- sum((jojo[,1] - fitted(jojoSESAlpha50)))
+jojoSSEAlpha95 <- sum((jojo[,1] - fitted(jojoSESAlpha95)))
+jojoSSEAlpha99 <- sum((jojo[,1] - fitted(jojoSESAlpha99)))
+
+jojoSSEAlpha01
+jojoSSEAlpha05
+jojoSSEAlpha50
+jojoSSEAlpha95
+jojoSSEAlpha99
+
+```
+
+## Part C
+The SSE vs Alpha graph plotted below indicates that SSE is high when alpha = 0.00, and generally decreases until alpha = 0.4 or 0.5. The effect of Alpha is a measure of accuracy for forecasts. An optimal alpha will minimize SSE, meaning the predictions will get closer to our actuals.
+```{r sse plot, echo=FALSE}
+
+# sse mass calculcation, source same as above. 
+for(i in seq(0, 1, by=0.1)) {
+   assign(paste("ses", i, sep = ""), ses(jojo, alpha=i, initial="simple"))
+}
+
+# initialize vector
+sesAlpha = {}
+sesAlpha[1] <- 0
+sesAlpha[2] <- 0.1
+sesAlpha[3] <- 0.2
+sesAlpha[4] <- 0.3
+sesAlpha[5] <- 0.4
+sesAlpha[6] <- 0.5
+sesAlpha[7] <- 0.6
+sesAlpha[8] <- 0.7
+sesAlpha[9] <- 0.8
+sesAlpha[10] <- 0.9
+sesAlpha[11] <- 1
+
+# initialize vector
+sesSSE = {}
+sesSSE[1] <- ses0$model$SSE
+sesSSE[2] <- ses0.1$model$SSE
+sesSSE[3] <- ses0.2$model$SSE
+sesSSE[4] <- ses0.3$model$SSE
+sesSSE[5] <- ses0.4$model$SSE
+sesSSE[6] <- ses0.5$model$SSE
+sesSSE[7] <- ses0.6$model$SSE
+sesSSE[8] <- ses0.7$model$SSE
+sesSSE[9] <- ses0.8$model$SSE
+sesSSE[10] <- ses0.9$model$SSE
+sesSSE[11] <- ses1$model$SSE
+
+plot(sesAlpha, sesSSE, type="o", col="black", xlab="Alpha", ylab="SSE")
+
+```
+
+## Part D
+We set alpha=NULL so that the ses will estimate the optimal alpha by itself. According to Part B, I had an alpha=0.5 and alpha=NULL predictions are not very far from alpha=0.5. This suggests that alpha=0.4 or alpha=0.5 is indeed optimal. 
+```{r optimal_alpha, echo=FALSE}
+
+# optimal alpha vs. Part B
+jojoSESOptimalAlpha <- ses(jojo, initial="simple", alpha=NULL, h=4)
+
+jojoSESAlpha01
+jojoSESAlpha05
+jojoSESAlpha50
+jojoSESAlpha95
+jojoSESAlpha99
+jojoSESOptimalAlpha
+
+```
+
+## Part E
+Does not make much difference. Both are very accurate and only differs by 0.00003 in forecast.
+```{r optimal_initial, echo=FALSE}
+
+# optimal initial
+jojoSESOptimalInitial <- ses(jojoTS, initial="optimal", alpha=NULL, h=4)
+
+jojoSESOptimalAlpha
+jojoSESOptimalInitial
+
+```
+
+# Question 3
+
+## Part A
+Plotted acf and pacf. I can also plot acf2 to see the a common scale on the same plot sheet. LAG are in units of Quarterly Earnings per Share. Based on this model a MA(2) is approriate because after 2nd lag it is clear the model is decaying. AR(1) is approriate because after the 1st lag in the pacf, the model spiked to near zero.
+```{r acf pacf, echo=FALSE}
+
+# acf & pacf
+jojoNormalDiff <- diff(jojoTS)
+acf(jojoNormalDiff, xlab="LAG, Quarterly Earnings per Share")
+pacf(jojoNormalDiff, xlab="LAG, Quarterly Earnings per Share")
+
+#acf2(jojoManualDiff, xlab="LAG, Quarterly Earnings per Share") 
+
+```
+
+## Part B
+Fitted model of p=1, d=1, q=2. Also tried other possible values of p's and q's. It appears p=1, q=2 has the lowest s.e.. Also, p=1, q=2 seems to have the lowest aic of all the possible combinations tried.
+```{r arima, echo=FALSE}
+
+# fit arima
+jojoARIMA <- arima(jojoTS, order=c(1,1,2))
+
+jojoARIMA2 <- arima(jojoTS, order=c(1,1,1))
+jojoARIMA3 <- arima(jojoTS, order=c(2,1,1))
+jojoARIMA4 <- arima(jojoTS, order=c(2,1,2))
+
+jojoARIMA
+jojoARIMA2
+jojoARIMA3
+jojoARIMA4
+
+```
+
+## Part C
+Based on tsdiag(jojoARIMA), which provided a p-values graph for Ljung-Box statistics, the points surpassed 0.05 by a wide margin so therefore the residuals are not stationary; we cannot reject the null hypothesis.
+```{r residuals, echo=FALSE}
+
+# plot residuals
+tsdiag(jojoARIMA)
+plot(jojoARIMA$residuals, type="p")
+
+acf(jojoNormalDiff)
+acf(jojoARIMA$residuals)
+pacf(jojoNormalDiff)
+pacf(jojoARIMA$residuals)
+
+```
+
+## Part D
+Performed predict looking 4 steps into the future. Applied arima to order of p=1, d=0, q=1.
+```{r predict, echo=FALSE}
+
+# predict given and my own
+jojoARIMAGiven <- arima(jojoTS, order=c(1,0,1), method="ML") # 1,0,1
+jojoARIMAPredictGiven <- predict(jojoARIMAGiven, n.ahead=4)
+jojoARIMAPredictGiven
+
+#jojoARIMAPredict <- predict(jojoARIMA, n.ahead=4) # 1,1,2
+#jojoARIMAPredict
+
+```
+
+## Part E
+ARIMA(1,0,1) model gave an SSE of 22 to 22.8: 1.4, 2.02, 2.47, 2.86... ses gave an clean cut SSE of 114. ARIMA performed better.

@@ -1,0 +1,25 @@
+---
+title: "hw1"
+author: "Warlon Zeng"
+date: "9/28/2016"
+output: pdf_document
+---
+
+<!-- I am using .Rmd to output a .pdf report in addition to the code that is already embedded into this.
+Let me know if I should just submit .R instead. I do not see a guideline to format submission in newclasses. -->
+
+<!-- Set up .pdf output -->
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<!-- Get working directory -->
+```{getwd()}
+```
+
+<!-- Question 1 -->
+# Data Exploration, Qualitative statistics and Missing Data
+```{r df}
+df <- read.csv("data.txt")
+summary(df)
+```
